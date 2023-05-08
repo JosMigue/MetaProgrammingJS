@@ -1,0 +1,7 @@
+{
+    "errors" : {
+        "number": ":input must be a number",
+        "string": ":input must be a string",
+        "number,positive_number": ":input must be a number greater than zero"
+    }
+}
