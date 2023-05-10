@@ -1,22 +1,64 @@
 var parameters = {
     inputs: {
-        'sku': {'label': 'SKU', "type": 'string'},
-        'quantity': {'label': 'Quantity', "type": 'number,positive_number'},
-        'billed': {'label': 'Billed', "type": 'number'},
-        'difference': {'label': 'Difference', "type": 'number'},
-        'subtotal': {'label': 'Subtotal', "type": 'number'},
-        'iva': {'label': 'IVA', "type": 'number'},
-        'iva2': {'label': 'IVA2', "type": 'number'},
-        'total': {'label': 'Total', "type": 'number'},
+        'primary': {'label': 'Key', "type": 'string', 'format':'string', "order": 1},
+        'sku': {'label': 'SKU', "type": 'string', 'format':'string', "order": 2},
+        'quantity': {'label': 'Quantity', "type": 'number,positive_number', 'format':'number', "order": 4},
+        'billed': {'label': 'Billed', "type": 'number', 'format':'money', "order": 5},
+        'difference': {'label': 'Difference', "type": 'number', 'format':'money', "order": 6},
+        'subtotal': {'label': 'Subtotal', "type": 'number', 'format':'money', "order": 8},
+        'iva': {'label': 'IVA', "type": 'number', 'format':'money', "order": 7},
+        'total': {'label': 'Total', "type": 'number', 'format':'money', "order": 9},
+        'currency':{'label': 'Currency', 'type':'selectbox', 'format':'string', 'order':3, "options":{
+                'MXN':{'label': 'MXN'},
+                'USD':{'label': 'USD'}
+            }
+        }
     },
-    primaryKey: 'sku',
+    primaryKey: 'primary',
     accumulators: {
         'iva':{'message': 'Total IVA amount:'},
         'subtotal':{'message': 'Total Subtotal Amount'},
         'total':{'message':'Total to be requested:'},
-    }
+    },
+    table_name: 'Test name'
 };
 
+var test= {
+    "inputs":{
+        "name":{"label":"Name","type":"string","format":"string", "order":2},
+        "invoice_amount":{"label":"Invoice amount","type":"number","format":"money", "order":4},
+        "claim_amount":{"label":"Claim amount","type":"number","format":"money","order":5},
+        "payment":{"label":"Payment","type":"number","format":"money","order":6},
+        "total_to_apply":{"label":"Total to Apply","type":"number","format":"money", "order":7},
+        'currency':{'label': 'Invoice Currency', 'type':'selectbox','format':'string','order':3, 
+            "options":{
+                'MXN':{'label': 'MXN'},
+                'USD':{'label': 'USD'}
+            },
+        },
+        'document_type':{'label': 'Document Type', 'type':'selectbox', 'format':'string', 'order':1,
+            "options":{
+                'Invoice':{'label': 'Invoice'}, 
+                'Credit note':{'label': 'Credit note'},
+                'Debit note':{'label': 'Debit note'}
+            }
+        }
+},
+"primaryKey":"name",
+"accumulators":{
+    "invoice_amount":{
+        "message":"Total Invoice Amount:"
+    },
+    "claim_amount":{
+        "message":"Total claim amount"
+    },
+    "payment":{
+        "message":"Total Payment:"
+    },
+    "total_to_apply":{
+        "message":"Total to be applie:"
+    }
+}};
 var config = {
     errors : {
         "number": ":input must be a number",
@@ -28,6 +70,17 @@ var config = {
 var items  = {};
 var accumulators = {};
 setup(parameters);
+
+function sortObjects(obj){
+    const order = [], res = {};
+    Object.keys(obj).forEach(key => {
+        return order[obj[key]['order'] - 1] = key;
+    });
+    order.forEach(key => {
+        res[key] = obj[key];
+    });
+    return res;
+}
 
 function saveData(stayInModal){
     var primary = document.getElementById(parameters.primaryKey).value;
@@ -91,10 +144,23 @@ function preRenderData(primaryKey,data){
         '<td>'+primaryKey+'</td>';
         Object.keys(parameters.inputs).forEach(function(key){
             if(key != parameters.primaryKey)
-                template += '<td>'+data[key]+'</td>';
+                template += '<td>'+formatValue(parameters.inputs[key].format,data[key])+'</td>';
+            else
+                template += '<td>'+primaryKey + '</td>';
         });
     template+='</tr>';
     return template;
+}
+
+function formatValue(type,value){
+	var response;
+	switch(type){
+		case 'money': response = moneyFormat(value);
+		break;
+		default: response = value;
+	}
+	return response;
+
 }
 
 function onlyNumbers(input, allowNegativeNumbers) {
@@ -128,12 +194,15 @@ function clearField(id){
     document.getElementById(id).value = '';
 }
 function moneyFormat(value){
+	if(isNaN(value)){
+		value = 0;
+	}
     var formatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
     });
     return formatter.format(value);
-}
+}   
 function resetData(){
     generateAccumulators();
 }
@@ -145,6 +214,8 @@ function resetFields(){
 }
 
 function setup(parameters){
+    document.getElementById('data-table-title').innerText= parameters.table_name ? parameters.table_name : 'Item Loading Table' ;
+    parameters.inputs = sortObjects(parameters.inputs);
     var table = document.getElementById('main-table-head');
     var modalBody = document.getElementById('modal-body-row');
     Object.keys(parameters.inputs).forEach(function(key,index){
@@ -166,13 +237,42 @@ function createInput(config, key){
     label.setAttribute('for', key);
     label.setAttribute('class', 'control-label');
     label.textContent = config.label;
-    var input = document.createElement('input');
+    input = createInputElement(config);
     input.setAttribute('class', 'form-control');
     input.setAttribute('id', key);
     input.addEventListener('focusout',function (e) {getValidation(config.type, e.target)});
     div.appendChild(label);
     div.appendChild(input);
     return div;
+}
+
+function createInputElement(config){
+    var response = '';
+    switch(config.type){
+        case 'selectbox':
+            response = buildSelectElement(config.options);
+            break;
+        default: response = document.createElement('input');
+    }
+
+    return response;
+}
+
+function buildSelectElement(data){
+    var select = document.createElement('select');
+    var option = document.createElement('option');
+    option.setAttribute('value', '');
+    option.setAttribute('selected','selected');
+    option.disabled = true;
+    option.textContent = 'Select';
+    select.appendChild(option);
+    Object.keys(data).forEach(function(key){
+        var option = document.createElement('option');
+        option.setAttribute('value', key);
+        option.textContent = data[key].label;
+        select.appendChild(option);
+    });
+    return select;
 }
 
 function getValidation(type,target){
